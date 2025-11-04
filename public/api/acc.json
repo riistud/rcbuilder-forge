@@ -1,0 +1,20 @@
+[
+  {
+    "username": "admin",
+    "password": "admin123",
+    "role": "admin",
+    "exp": "Lifetime"
+  },
+  {
+    "username": "demo",
+    "password": "demo123",
+    "role": "user",
+    "exp": "2025-12-31"
+  },
+  {
+    "username": "riicode",
+    "password": "riicode2025",
+    "role": "admin",
+    "exp": "Lifetime"
+  }
+]

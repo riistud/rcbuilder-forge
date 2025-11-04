@@ -13,8 +13,13 @@ const API_URL = "https://api.deepinfra.com/v1/openai/chat/completions";
 const MAX_TIMEOUT_MS = 500000;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // File paths
 const USERS_DB = path.join(__dirname, 'acc.json');
@@ -88,12 +93,12 @@ app.post('/api/auth/login', async (req, res) => {
 
 // ==================== AI ROUTES ====================
 
-app.post('/api/ai/generate', async (req, res) => {
+app.post('/api/generate', async (req, res) => {
   try {
-    const { message, model, history = [] } = req.body;
+    const { prompt, model, username } = req.body;
 
-    if (!message || !model) {
-      return res.status(400).json({ error: 'Message and model are required' });
+    if (!prompt || !model) {
+      return res.status(400).json({ error: 'Prompt and model are required' });
     }
 
     const systemInstruction = `Anda adalah RiiBotzz, asisten AI multifungsi yang dibuat oleh RiiCODE.
@@ -128,8 +133,7 @@ Selalu deliver kode yang LENGKAP, SIAP PAKAI, dan MODERN!`;
 
     const apiMessages = [
       { role: "system", content: systemInstruction },
-      ...history,
-      { role: "user", content: message }
+      { role: "user", content: prompt }
     ];
 
     const payload = {
@@ -157,7 +161,15 @@ Selalu deliver kode yang LENGKAP, SIAP PAKAI, dan MODERN!`;
       throw new Error('Empty response from AI');
     }
 
-    res.json({ success: true, content });
+    const sessionName = `session_${Date.now()}`;
+    const userDir = path.join(SESSIONS_DIR, username);
+    const sessionDir = path.join(userDir, sessionName);
+
+    await fs.mkdir(sessionDir, { recursive: true });
+    const fileName = 'generated_code.txt';
+    await fs.writeFile(path.join(sessionDir, fileName), content, 'utf8');
+
+    res.json({ success: true, response: content });
 
   } catch (error) {
     console.error('AI Generate error:', error);
@@ -198,35 +210,48 @@ app.post('/api/sessions/save', async (req, res) => {
   }
 });
 
-app.get('/api/sessions/list/:username', async (req, res) => {
+app.get('/api/sessions', async (req, res) => {
   try {
-    const { username } = req.params;
-    const userDir = path.join(SESSIONS_DIR, username);
+    const sessions = [];
 
     try {
-      await fs.access(userDir);
+      await fs.access(SESSIONS_DIR);
     } catch {
       return res.json({ sessions: [] });
     }
 
-    const sessions = await fs.readdir(userDir);
-    const sessionList = [];
+    const userDirs = await fs.readdir(SESSIONS_DIR);
 
-    for (const session of sessions) {
-      const sessionPath = path.join(userDir, session);
-      const stats = await fs.stat(sessionPath);
-      
-      if (stats.isDirectory()) {
-        const files = await getAllFiles(sessionPath);
-        sessionList.push({
-          name: session,
-          created: stats.birthtime,
-          fileCount: files.length
-        });
+    for (const username of userDirs) {
+      const userDir = path.join(SESSIONS_DIR, username);
+
+      try {
+        await fs.access(userDir);
+        const userStats = await fs.stat(userDir);
+
+        if (userStats.isDirectory()) {
+          const userSessions = await fs.readdir(userDir);
+
+          for (const session of userSessions) {
+            const sessionPath = path.join(userDir, session);
+            const stats = await fs.stat(sessionPath);
+
+            if (stats.isDirectory()) {
+              const files = await getAllFiles(sessionPath);
+              sessions.push({
+                name: session,
+                created: stats.birthtime,
+                fileCount: files.length
+              });
+            }
+          }
+        }
+      } catch (err) {
+        continue;
       }
     }
 
-    res.json({ sessions: sessionList });
+    res.json({ sessions });
 
   } catch (error) {
     console.error('List sessions error:', error);
@@ -252,14 +277,24 @@ async function getAllFiles(dir) {
   return files;
 }
 
-app.get('/api/sessions/download/:username/:sessionName', async (req, res) => {
+app.get('/api/sessions/:sessionName/download', async (req, res) => {
   try {
-    const { username, sessionName } = req.params;
-    const sessionPath = path.join(SESSIONS_DIR, username, sessionName);
+    const { sessionName } = req.params;
+    let sessionPath = null;
 
-    try {
-      await fs.access(sessionPath);
-    } catch {
+    const userDirs = await fs.readdir(SESSIONS_DIR);
+    for (const username of userDirs) {
+      const possiblePath = path.join(SESSIONS_DIR, username, sessionName);
+      try {
+        await fs.access(possiblePath);
+        sessionPath = possiblePath;
+        break;
+      } catch {
+        continue;
+      }
+    }
+
+    if (!sessionPath) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
@@ -282,14 +317,24 @@ app.get('/api/sessions/download/:username/:sessionName', async (req, res) => {
   }
 });
 
-app.delete('/api/sessions/delete/:username/:sessionName', async (req, res) => {
+app.delete('/api/sessions/:sessionName', async (req, res) => {
   try {
-    const { username, sessionName } = req.params;
-    const sessionPath = path.join(SESSIONS_DIR, username, sessionName);
+    const { sessionName } = req.params;
+    let sessionPath = null;
 
-    try {
-      await fs.access(sessionPath);
-    } catch {
+    const userDirs = await fs.readdir(SESSIONS_DIR);
+    for (const username of userDirs) {
+      const possiblePath = path.join(SESSIONS_DIR, username, sessionName);
+      try {
+        await fs.access(possiblePath);
+        sessionPath = possiblePath;
+        break;
+      } catch {
+        continue;
+      }
+    }
+
+    if (!sessionPath) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
@@ -472,7 +517,7 @@ app.get('/api/health', (req, res) => {
 // ==================== START SERVER ====================
 
 initializeDirectories().then(() => {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║

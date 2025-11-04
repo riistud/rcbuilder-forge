@@ -1,4 +1,8 @@
-# Welcome to your Lovable project
+# RcBuilder - AI Code Generation Platform
+
+Full-stack AI-powered code generation platform with multi-model support, session management, and admin dashboard.
+
+**Created by RiiCODE** 💜
 
 ## Project info
 
@@ -60,9 +64,73 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Quick Start
+
+### Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start backend
+cd public/api
+npm install
+npm start
+
+# In another terminal, start frontend
+npm run dev
+```
+
+Visit: `http://localhost:8080`
+
+**Demo Accounts:**
+- Admin: `admin` / `admin123`
+- User: `demo` / `demo123`
+
+### VPS Production Deployment
+
+See detailed guide: [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+Quick commands:
+```bash
+# Backend
+cd public/api
+npm install
+pm2 start ecosystem.config.js
+
+# Frontend
+npm install
+npm run build
+pm2 start "serve -s dist -l 8080" --name "rcbuilder-frontend"
+```
+
+## Architecture
+
+- **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui
+- **Backend**: Node.js + Express
+- **AI**: DeepInfra API (Multiple models support)
+- **Storage**: JSON files (users, models, sessions)
+
+## Features
+
+- Multi AI model support (Qwen, DeepSeek, GPT, etc)
+- Real-time code generation
+- Session management & download
+- Admin dashboard for user & model management
+- Beautiful glassmorphism UI design
+- Responsive & modern interface
+
 ## How can I deploy this project?
 
+### Option 1: Lovable Hosting
+
 Simply open [Lovable](https://lovable.dev/projects/a220d57a-2c6e-40c8-911e-28376e29c122) and click on Share -> Publish.
+
+### Option 2: VPS Deployment
+
+Follow our comprehensive guide: [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+Or quick start: [QUICKSTART.md](./QUICKSTART.md)
 
 ## Can I connect a custom domain to my Lovable project?
 

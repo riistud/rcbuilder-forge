@@ -20,12 +20,18 @@ interface Session {
   fileCount: number;
 }
 
+interface Model {
+  name: string;
+  id: string;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("google/gemini-2.5-flash");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [models, setModels] = useState<Model[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [response, setResponse] = useState("");
 
@@ -43,8 +49,25 @@ const Dashboard = () => {
     }
     
     setUser(parsedUser);
+    loadModels();
     loadSessions();
   }, [navigate]);
+
+  const loadModels = async () => {
+    try {
+      const res = await fetch("/api/admin/models");
+      const data = await res.json();
+      if (data.models && data.models.length > 0) {
+        setModels(data.models);
+        if (!selectedModel) {
+          setSelectedModel(data.models[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load models:", error);
+      toast.error("Failed to load AI models");
+    }
+  };
 
   const loadSessions = async () => {
     try {
@@ -177,13 +200,20 @@ const Dashboard = () => {
                   <label className="text-sm font-medium mb-2 block">Select Model</label>
                   <Select value={selectedModel} onValueChange={setSelectedModel}>
                     <SelectTrigger className="bg-background/50">
-                      <SelectValue />
+                      <SelectValue placeholder="Choose AI Model" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                      <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
-                      <SelectItem value="openai/gpt-5">GPT-5</SelectItem>
-                      <SelectItem value="deepseek-ai/DeepSeek-V3.1">DeepSeek V3.1</SelectItem>
+                      {models.length > 0 ? (
+                        models.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="none" disabled>
+                          No models available
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

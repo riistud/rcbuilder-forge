@@ -2,7 +2,8 @@ import { useState } from "react";
 import { PlusCircle, MessageSquare, Download, Trash2, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "sonner";
+import { FileManager } from "@/components/FileManager";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Session {
   name: string;
@@ -10,20 +11,30 @@ interface Session {
   fileCount: number;
 }
 
+interface FileData {
+  filename: string;
+  code: string;
+}
+
 interface SessionSidebarProps {
   sessions: Session[];
+  files: FileData[];
   onNewChat: () => void;
   onDownloadSession: (name: string) => void;
   onDeleteSession: (name: string) => void;
+  onDeleteFile: (filename: string) => void;
 }
 
 export const SessionSidebar = ({
   sessions,
+  files,
   onNewChat,
   onDownloadSession,
   onDeleteSession,
+  onDeleteFile,
 }: SessionSidebarProps) => {
-  const [isOpen, setIsOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [isOpen, setIsOpen] = useState(!isMobile);
 
   return (
     <>
@@ -31,7 +42,7 @@ export const SessionSidebar = ({
         variant="ghost"
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden"
+        className="fixed top-4 left-4 z-50 lg:hidden bg-card/80 backdrop-blur-sm"
       >
         {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </Button>
@@ -39,7 +50,7 @@ export const SessionSidebar = ({
       <aside
         className={`fixed lg:sticky top-0 left-0 h-screen bg-card border-r border-border transition-transform duration-300 z-40 ${
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        } w-64 flex flex-col`}
+        } w-full sm:w-80 lg:w-72 flex flex-col`}
       >
         <div className="p-4 border-b border-border">
           <Button
@@ -93,6 +104,8 @@ export const SessionSidebar = ({
             )}
           </div>
         </ScrollArea>
+
+        <FileManager files={files} onDeleteFile={onDeleteFile} />
       </aside>
     </>
   );

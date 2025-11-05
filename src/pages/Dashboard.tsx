@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import Swal from "sweetalert2";
 import { ChatMessage } from "@/components/ChatMessage";
 import { SessionSidebar } from "@/components/SessionSidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface User {
   username: string;
@@ -39,6 +40,7 @@ interface FileData {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [user, setUser] = useState<User | null>(null);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -47,6 +49,7 @@ const Dashboard = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [savedFiles, setSavedFiles] = useState<FileData[]>([]);
+  const [currentSession, setCurrentSession] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -135,10 +138,35 @@ const Dashboard = () => {
     }
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
+    if (messages.length > 0 && savedFiles.length > 0) {
+      const sessionName = `session_${Date.now()}`;
+      try {
+        await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            name: sessionName,
+            files: savedFiles,
+            messages: messages
+          }),
+        });
+        setCurrentSession(sessionName);
+        loadSessions();
+        toast.success("Session saved!");
+      } catch (error) {
+        toast.error("Failed to save session");
+      }
+    }
     setMessages([]);
     setSavedFiles([]);
     setInput("");
+    setCurrentSession("");
+  };
+
+  const handleDeleteFile = (filename: string) => {
+    setSavedFiles(prev => prev.filter(f => f.filename !== filename));
+    toast.success(`${filename} deleted`);
   };
 
   const handleSaveCode = async (code: string, filename: string) => {
@@ -217,79 +245,85 @@ const Dashboard = () => {
     <div className="flex h-screen bg-background overflow-hidden">
       <SessionSidebar
         sessions={sessions}
+        files={savedFiles}
         onNewChat={handleNewChat}
         onDownloadSession={handleDownloadSession}
         onDeleteSession={handleDeleteSession}
+        onDeleteFile={handleDeleteFile}
       />
 
-      <div className="flex-1 flex flex-col">
-        <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <Code2 className="w-7 h-7 text-primary" />
-            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-14 sm:h-16 border-b border-border bg-card flex items-center justify-between px-3 sm:px-6 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Code2 className="w-5 h-5 sm:w-7 sm:h-7 text-primary flex-shrink-0" />
+            <h1 className="text-base sm:text-xl font-bold bg-gradient-primary bg-clip-text text-transparent truncate">
               RcBuilder AI
             </h1>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger className="w-[200px] bg-background border-border">
-                <SelectValue placeholder="Select Model" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.length > 0 ? (
-                  models.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name}
+          <div className="flex items-center gap-2 sm:gap-4">
+            {!isMobile && (
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-[140px] sm:w-[200px] bg-background border-border">
+                  <SelectValue placeholder="Model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.length > 0 ? (
+                    models.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>
+                      No models
                     </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="none" disabled>
-                    No models
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+                  )}
+                </SelectContent>
+              </Select>
+            )}
 
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted">
-              <span className="text-sm font-medium">{user.username}</span>
-              <span className="text-xs text-muted-foreground">•</span>
-              <span className="text-xs text-muted-foreground">{user.expired}</span>
-            </div>
+            {!isMobile && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted">
+                <span className="text-sm font-medium">{user.username}</span>
+                <span className="text-xs text-muted-foreground">•</span>
+                <span className="text-xs text-muted-foreground">{user.expired}</span>
+              </div>
+            )}
 
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
+            <Button variant="outline" size={isMobile ? "sm" : "sm"} onClick={handleLogout}>
+              <LogOut className="w-4 h-4 sm:mr-2" />
+              {!isMobile && <span>Logout</span>}
             </Button>
           </div>
         </header>
 
         <ScrollArea className="flex-1">
           {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md px-6">
-                <div className="w-16 h-16 rounded-full bg-gradient-primary mx-auto mb-4 flex items-center justify-center">
-                  <Code2 className="w-8 h-8 text-primary-foreground" />
+            <div className="flex items-center justify-center h-full p-4">
+              <div className="text-center max-w-md w-full">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-primary mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+                  <Code2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
                 </div>
-                <h2 className="text-2xl font-bold mb-2">Welcome to RcBuilder AI</h2>
-                <p className="text-muted-foreground mb-6">
+                <h2 className="text-xl sm:text-2xl font-bold mb-2">Welcome to RcBuilder AI</h2>
+                <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6">
                   Your intelligent coding assistant. Chat naturally and I'll help you build anything.
                 </p>
                 <div className="grid gap-2 text-left">
-                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-sm">💬 Natural conversation about code</p>
+                  <div className="p-2.5 sm:p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-xs sm:text-sm">💬 Natural conversation about code</p>
                   </div>
-                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-sm">⚡ Automatic code generation with syntax highlighting</p>
+                  <div className="p-2.5 sm:p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-xs sm:text-sm">⚡ Automatic code generation with syntax highlighting</p>
                   </div>
-                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-sm">💾 Save code blocks directly to your project</p>
+                  <div className="p-2.5 sm:p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-xs sm:text-sm">💾 Save code blocks directly to your project</p>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto px-2 sm:px-4">
               {messages.map((msg, idx) => (
                 <ChatMessage
                   key={idx}
@@ -303,15 +337,37 @@ const Dashboard = () => {
           )}
         </ScrollArea>
 
-        <div className="border-t border-border bg-card p-4">
+        <div className="border-t border-border bg-card p-2 sm:p-4 flex-shrink-0">
           <div className="max-w-4xl mx-auto">
-            <div className="flex gap-3">
+            {isMobile && (
+              <div className="mb-2">
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="w-full bg-background border-border">
+                    <SelectValue placeholder="Select Model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.length > 0 ? (
+                      models.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>
+                        No models
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex gap-2 sm:gap-3">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask me anything or describe what you want to build..."
-                className="resize-none bg-background border-border"
-                rows={3}
+                className="resize-none bg-background border-border text-sm sm:text-base"
+                rows={isMobile ? 2 : 3}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -323,17 +379,17 @@ const Dashboard = () => {
                 onClick={handleSend}
                 disabled={isGenerating || !input.trim()}
                 className="bg-gradient-primary hover:shadow-glow-primary self-end"
-                size="lg"
+                size={isMobile ? "default" : "lg"}
               >
-                <Send className="w-5 h-5" />
+                <Send className={isMobile ? "w-4 h-4" : "w-5 h-5"} />
               </Button>
             </div>
             {savedFiles.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 sm:mt-3 flex flex-wrap gap-1.5 sm:gap-2">
                 {savedFiles.map((file, idx) => (
                   <div
                     key={idx}
-                    className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-xs font-mono"
+                    className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-primary/20 border border-primary/30 text-xs font-mono"
                   >
                     {file.filename}
                   </div>

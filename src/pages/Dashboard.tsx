@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Code2, LogOut, Send, FolderOpen, Download, Trash2, MessageSquare, FileCode, Eye, Save, X, Sparkles } from "lucide-react";
+import { Code2, LogOut, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import Swal from "sweetalert2";
+import { ChatMessage } from "@/components/ChatMessage";
+import { SessionSidebar } from "@/components/SessionSidebar";
 
 interface User {
   username: string;
@@ -31,18 +32,22 @@ interface Message {
   content: string;
 }
 
+interface FileData {
+  filename: string;
+  code: string;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
-  const [prompt, setPrompt] = useState("");
+  const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedModel, setSelectedModel] = useState("");
   const [models, setModels] = useState<Model[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [response, setResponse] = useState("");
-  const [mode, setMode] = useState<"chat" | "code">("code");
-  const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [showPreview, setShowPreview] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [savedFiles, setSavedFiles] = useState<FileData[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -61,6 +66,10 @@ const Dashboard = () => {
     loadModels();
     loadSessions();
   }, [navigate]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const loadModels = async () => {
     try {
@@ -88,19 +97,19 @@ const Dashboard = () => {
     }
   };
 
-  const handleChat = async () => {
-    if (!prompt.trim()) {
+  const handleSend = async () => {
+    if (!input.trim()) {
       toast.error("Please enter a message");
       return;
     }
 
-    const userMessage: Message = { role: "user", content: prompt };
-    setChatMessages(prev => [...prev, userMessage]);
-    setPrompt("");
+    const userMessage: Message = { role: "user", content: input };
+    setMessages(prev => [...prev, userMessage]);
+    setInput("");
     setIsGenerating(true);
 
     try {
-      const messages = [...chatMessages, userMessage].map(msg => ({
+      const conversationMessages = [...messages, userMessage].map(msg => ({
         role: msg.role,
         content: msg.content
       }));
@@ -108,16 +117,16 @@ const Dashboard = () => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages, model: selectedModel }),
+        body: JSON.stringify({ messages: conversationMessages, model: selectedModel }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
         const assistantMessage: Message = { role: "assistant", content: data.response };
-        setChatMessages(prev => [...prev, assistantMessage]);
+        setMessages(prev => [...prev, assistantMessage]);
       } else {
-        toast.error(data.error || "Chat failed");
+        toast.error(data.error || "Failed to get response");
       }
     } catch (error) {
       toast.error("Connection error");
@@ -126,72 +135,35 @@ const Dashboard = () => {
     }
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      toast.error("Please enter a prompt");
-      return;
-    }
-
-    setIsGenerating(true);
-    setResponse("");
-    setShowPreview(false);
-
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          model: selectedModel,
-          username: user?.username,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setResponse(data.response);
-        toast.success("Code generated successfully!");
-        loadSessions();
-      } else {
-        toast.error(data.error || "Generation failed");
-      }
-    } catch (error) {
-      toast.error("Connection error");
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleNewChat = () => {
+    setMessages([]);
+    setSavedFiles([]);
+    setInput("");
   };
 
-  const handleSaveProject = async () => {
-    if (!response) return;
-
+  const handleSaveCode = async (code: string, filename: string) => {
     const result = await Swal.fire({
-      title: "Save Project",
-      input: "text",
-      inputLabel: "Project Name",
-      inputPlaceholder: "my-awesome-project",
+      title: "Save Code",
+      text: `Save ${filename} to project?`,
+      icon: "question",
       showCancelButton: true,
-      background: "hsl(220 20% 12%)",
-      color: "hsl(210 100% 98%)",
+      confirmButtonText: "Save",
+      background: "hsl(222 47% 14%)",
+      color: "hsl(210 40% 98%)",
     });
 
-    if (result.isConfirmed && result.value) {
-      toast.success(`Project "${result.value}" saved!`);
-      setResponse("");
-      setPrompt("");
-      loadSessions();
+    if (result.isConfirmed) {
+      setSavedFiles(prev => {
+        const existing = prev.findIndex(f => f.filename === filename);
+        if (existing >= 0) {
+          const updated = [...prev];
+          updated[existing] = { filename, code };
+          return updated;
+        }
+        return [...prev, { filename, code }];
+      });
+      toast.success(`${filename} saved to project!`);
     }
-  };
-
-  const handleCancelCode = () => {
-    setResponse("");
-    setPrompt("");
-    setShowPreview(false);
-  };
-
-  const isHTMLCode = (code: string) => {
-    return code.includes("<html") || (code.includes("<style") && code.includes("<script"));
   };
 
   const handleDownloadSession = async (sessionName: string) => {
@@ -242,247 +214,132 @@ const Dashboard = () => {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
-      <nav className="glass-panel border-b border-primary/20 sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Code2 className="w-8 h-8 text-primary animate-glow-pulse" />
-            <span className="text-2xl font-bold gradient-text">RcBuilder</span>
+    <div className="flex h-screen bg-background overflow-hidden">
+      <SessionSidebar
+        sessions={sessions}
+        onNewChat={handleNewChat}
+        onDownloadSession={handleDownloadSession}
+        onDeleteSession={handleDeleteSession}
+      />
+
+      <div className="flex-1 flex flex-col">
+        <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <Code2 className="w-7 h-7 text-primary" />
+            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              RcBuilder AI
+            </h1>
           </div>
+
           <div className="flex items-center gap-4">
-            <div className="glass-panel px-4 py-2 rounded-full">
-              <p className="text-sm font-semibold">{user.username}</p>
-              <p className="text-xs text-muted-foreground">Expires: {user.expired}</p>
+            <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <SelectTrigger className="w-[200px] bg-background border-border">
+                <SelectValue placeholder="Select Model" />
+              </SelectTrigger>
+              <SelectContent>
+                {models.length > 0 ? (
+                  models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="none" disabled>
+                    No models
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted">
+              <span className="text-sm font-medium">{user.username}</span>
+              <span className="text-xs text-muted-foreground">•</span>
+              <span className="text-xs text-muted-foreground">{user.expired}</span>
             </div>
-            <Button variant="outline" onClick={handleLogout} className="hover:scale-105 transition-transform">
+
+            <Button variant="outline" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 mr-2" />
               Logout
             </Button>
           </div>
-        </div>
-      </nav>
+        </header>
 
-      <div className="container mx-auto px-6 py-8">
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="glass-card border-primary/30 shadow-elevation-high">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="w-6 h-6 text-primary animate-pulse-slow" />
-                    AI Workspace
-                  </CardTitle>
-                  <Tabs value={mode} onValueChange={(v) => setMode(v as "chat" | "code")} className="w-auto">
-                    <TabsList className="glass-panel">
-                      <TabsTrigger value="chat" className="data-[state=active]:bg-primary/20">
-                        <MessageSquare className="w-4 h-4 mr-2" />
-                        Chat
-                      </TabsTrigger>
-                      <TabsTrigger value="code" className="data-[state=active]:bg-primary/20">
-                        <FileCode className="w-4 h-4 mr-2" />
-                        Code Gen
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
+        <ScrollArea className="flex-1">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md px-6">
+                <div className="w-16 h-16 rounded-full bg-gradient-primary mx-auto mb-4 flex items-center justify-center">
+                  <Code2 className="w-8 h-8 text-primary-foreground" />
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Select Model</label>
-                  <Select value={selectedModel} onValueChange={setSelectedModel}>
-                    <SelectTrigger className="bg-background/50 border-primary/30 hover:border-primary/50 transition-colors">
-                      <SelectValue placeholder="Choose AI Model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {models.length > 0 ? (
-                        models.map((model) => (
-                          <SelectItem key={model.id} value={model.id}>
-                            {model.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="none" disabled>
-                          No models available
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {mode === "chat" && chatMessages.length > 0 && (
-                  <div className="glass-panel p-4 rounded-lg max-h-[400px] overflow-y-auto space-y-3 border border-primary/20">
-                    {chatMessages.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-3 rounded-lg ${
-                          msg.role === "user"
-                            ? "bg-primary/20 ml-auto max-w-[80%]"
-                            : "bg-secondary/20 mr-auto max-w-[80%]"
-                        }`}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                      </div>
-                    ))}
+                <h2 className="text-2xl font-bold mb-2">Welcome to RcBuilder AI</h2>
+                <p className="text-muted-foreground mb-6">
+                  Your intelligent coding assistant. Chat naturally and I'll help you build anything.
+                </p>
+                <div className="grid gap-2 text-left">
+                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-sm">💬 Natural conversation about code</p>
                   </div>
-                )}
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    {mode === "chat" ? "Your Message" : "Your Prompt"}
-                  </label>
-                  <Textarea
-                    placeholder={
-                      mode === "chat"
-                        ? "Ask me anything..."
-                        : "e.g., Create a modern login page with React and Tailwind..."
-                    }
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    rows={6}
-                    className="bg-background/50 border-primary/30 focus:border-primary/50 transition-colors"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && e.ctrlKey) {
-                        mode === "chat" ? handleChat() : handleGenerate();
-                      }
-                    }}
-                  />
-                </div>
-
-                <Button
-                  onClick={mode === "chat" ? handleChat : handleGenerate}
-                  disabled={isGenerating}
-                  className="w-full bg-gradient-primary hover:shadow-glow-primary transition-all hover:scale-105"
-                >
-                  {isGenerating ? (
-                    <><Sparkles className="w-4 h-4 mr-2 animate-spin" />Generating...</>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      {mode === "chat" ? "Send Message" : "Generate Code"}
-                    </>
-                  )}
-                </Button>
-
-                {response && mode === "code" && (
-                  <div className="mt-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium flex items-center gap-2">
-                        <FileCode className="w-4 h-4 text-primary" />
-                        Generated Code
-                      </label>
-                      <div className="flex gap-2">
-                        {isHTMLCode(response) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setShowPreview(!showPreview)}
-                            className="hover:scale-105 transition-transform"
-                          >
-                            <Eye className="w-4 h-4 mr-2" />
-                            {showPreview ? "Hide" : "Preview"}
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={handleSaveProject}
-                          className="bg-gradient-secondary hover:shadow-glow-card transition-all"
-                        >
-                          <Save className="w-4 h-4 mr-2" />
-                          Save Project
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={handleCancelCode}
-                          className="hover:scale-105 transition-transform"
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="glass-panel p-6 rounded-lg border border-primary/30 overflow-hidden">
-                      <pre className="overflow-x-auto text-sm">
-                        <code className="text-primary">{response}</code>
-                      </pre>
-                    </div>
-
-                    {showPreview && isHTMLCode(response) && (
-                      <div className="glass-panel p-6 rounded-lg border border-secondary/30">
-                        <label className="text-sm font-medium mb-3 block flex items-center gap-2">
-                          <Eye className="w-4 h-4 text-secondary" />
-                          Live Preview
-                        </label>
-                        <iframe
-                          srcDoc={response}
-                          className="w-full h-[500px] bg-background rounded-lg border border-primary/20"
-                          title="Code Preview"
-                          sandbox="allow-scripts"
-                        />
-                      </div>
-                    )}
+                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-sm">⚡ Automatic code generation with syntax highlighting</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            <Card className="glass-card border-primary/30 shadow-elevation-high">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FolderOpen className="w-6 h-6 text-secondary animate-pulse-slow" />
-                  My Sessions
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                  {sessions.length === 0 ? (
-                    <div className="text-center py-12">
-                      <FileCode className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-sm text-muted-foreground">
-                        No sessions yet. Generate your first code!
-                      </p>
-                    </div>
-                  ) : (
-                    sessions.map((session) => (
-                      <div
-                        key={session.name}
-                        className="glass-panel p-4 rounded-lg border border-primary/20 hover:border-primary/50 transition-all hover:shadow-glow-card hover:scale-105"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-semibold text-sm">{session.name}</p>
-                            <p className="text-xs text-muted-foreground">{session.fileCount} files</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownloadSession(session.name)}
-                            className="flex-1 hover:scale-105 transition-transform"
-                          >
-                            <Download className="w-3 h-3 mr-1" />
-                            Download
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteSession(session.name)}
-                            className="hover:scale-110 transition-transform"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-sm">💾 Save code blocks directly to your project</p>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto">
+              {messages.map((msg, idx) => (
+                <ChatMessage
+                  key={idx}
+                  role={msg.role}
+                  content={msg.content}
+                  onSaveCode={handleSaveCode}
+                />
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </ScrollArea>
+
+        <div className="border-t border-border bg-card p-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex gap-3">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask me anything or describe what you want to build..."
+                className="resize-none bg-background border-border"
+                rows={3}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={isGenerating || !input.trim()}
+                className="bg-gradient-primary hover:shadow-glow-primary self-end"
+                size="lg"
+              >
+                <Send className="w-5 h-5" />
+              </Button>
+            </div>
+            {savedFiles.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {savedFiles.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-xs font-mono"
+                  >
+                    {file.filename}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

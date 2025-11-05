@@ -139,10 +139,23 @@ const Dashboard = () => {
   };
 
   const handleNewChat = async () => {
-    if (messages.length > 0 && savedFiles.length > 0) {
-      const sessionName = `session_${Date.now()}`;
+    if (messages.length > 0 || savedFiles.length > 0) {
+      const result = await Swal.fire({
+        title: "Start New Chat?",
+        text: "Current chat will be saved as a session",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Yes, create new",
+        cancelButtonText: "Cancel",
+        background: "hsl(222 47% 14%)",
+        color: "hsl(210 40% 98%)",
+      });
+
+      if (!result.isConfirmed) return;
+
+      const sessionName = `Session ${new Date().toLocaleString()}`;
       try {
-        await fetch("/api/sessions", {
+        const response = await fetch("/api/sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
@@ -151,13 +164,20 @@ const Dashboard = () => {
             messages: messages
           }),
         });
-        setCurrentSession(sessionName);
-        loadSessions();
-        toast.success("Session saved!");
+
+        if (response.ok) {
+          setCurrentSession(sessionName);
+          await loadSessions();
+          toast.success("Session saved!");
+        } else {
+          throw new Error("Failed to save session");
+        }
       } catch (error) {
+        console.error("Session save error:", error);
         toast.error("Failed to save session");
       }
     }
+    
     setMessages([]);
     setSavedFiles([]);
     setInput("");
@@ -169,29 +189,18 @@ const Dashboard = () => {
     toast.success(`${filename} deleted`);
   };
 
-  const handleSaveCode = async (code: string, filename: string) => {
-    const result = await Swal.fire({
-      title: "Save Code",
-      text: `Save ${filename} to project?`,
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Save",
-      background: "hsl(222 47% 14%)",
-      color: "hsl(210 40% 98%)",
-    });
-
-    if (result.isConfirmed) {
-      setSavedFiles(prev => {
-        const existing = prev.findIndex(f => f.filename === filename);
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = { filename, code };
-          return updated;
-        }
-        return [...prev, { filename, code }];
-      });
+  const handleSaveCode = (code: string, filename: string) => {
+    setSavedFiles(prev => {
+      const existing = prev.findIndex(f => f.filename === filename);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = { filename, code };
+        toast.success(`${filename} updated!`);
+        return updated;
+      }
       toast.success(`${filename} saved to project!`);
-    }
+      return [...prev, { filename, code }];
+    });
   };
 
   const handleDownloadSession = async (sessionName: string) => {
@@ -298,32 +307,50 @@ const Dashboard = () => {
           </div>
         </header>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full p-4">
+            <div className="flex items-center justify-center min-h-full p-4">
               <div className="text-center max-w-md w-full">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-primary mx-auto mb-3 sm:mb-4 flex items-center justify-center">
-                  <Code2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
+                <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-primary mx-auto mb-4 sm:mb-6 flex items-center justify-center shadow-lg shadow-primary/20">
+                  <Code2 className="w-7 h-7 sm:w-10 sm:h-10 text-primary-foreground" />
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold mb-2">Welcome to RcBuilder AI</h2>
-                <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6">
-                  Your intelligent coding assistant. Chat naturally and I'll help you build anything.
+                <h2 className="text-xl sm:text-3xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">Welcome to RcBuilder AI</h2>
+                <p className="text-sm sm:text-base text-muted-foreground mb-6 sm:mb-8">
+                  Your intelligent coding assistant powered by advanced AI
                 </p>
-                <div className="grid gap-2 text-left">
-                  <div className="p-2.5 sm:p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs sm:text-sm">💬 Natural conversation about code</p>
+                <div className="grid gap-2.5 text-left">
+                  <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 border border-border hover:border-primary/50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">💬</span>
+                      <div>
+                        <p className="text-sm sm:text-base font-semibold mb-1">Natural Conversation</p>
+                        <p className="text-xs text-muted-foreground">Chat naturally and get intelligent code suggestions</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="p-2.5 sm:p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs sm:text-sm">⚡ Automatic code generation with syntax highlighting</p>
+                  <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 border border-border hover:border-primary/50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">⚡</span>
+                      <div>
+                        <p className="text-sm sm:text-base font-semibold mb-1">Smart Code Generation</p>
+                        <p className="text-xs text-muted-foreground">Automatic syntax highlighting and file detection</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="p-2.5 sm:p-3 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs sm:text-sm">💾 Save code blocks directly to your project</p>
+                  <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 border border-border hover:border-primary/50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">💾</span>
+                      <div>
+                        <p className="text-sm sm:text-base font-semibold mb-1">Project Management</p>
+                        <p className="text-xs text-muted-foreground">Save code blocks and manage sessions easily</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto px-2 sm:px-4">
+            <div className="max-w-4xl mx-auto">
               {messages.map((msg, idx) => (
                 <ChatMessage
                   key={idx}

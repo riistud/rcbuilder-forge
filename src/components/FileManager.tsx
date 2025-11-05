@@ -51,61 +51,69 @@ export const FileManager = ({ files, onDeleteFile }: FileManagerProps) => {
       <div className="border-t border-border">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full p-3 flex items-center justify-between hover:bg-muted/50 transition-colors"
+          className="w-full p-3 flex items-center justify-between hover:bg-muted/50 transition-colors group"
         >
           <div className="flex items-center gap-2">
-            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            {isExpanded ? <ChevronDown className="w-4 h-4 transition-transform" /> : <ChevronRight className="w-4 h-4 transition-transform" />}
             <FileCode className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">File Manager</span>
-            <span className="text-xs text-muted-foreground">({files.length})</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">Files</span>
+            {files.length > 0 && (
+              <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                {files.length}
+              </span>
+            )}
           </div>
         </button>
 
         {isExpanded && (
-          <ScrollArea className="max-h-64">
-            <div className="px-3 pb-3 space-y-1">
+          <ScrollArea className="max-h-48 sm:max-h-64">
+            <div className="px-3 pb-3 space-y-1.5">
               {files.length === 0 ? (
                 <div className="text-center py-6">
                   <FileCode className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
                   <p className="text-xs text-muted-foreground">No files saved yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Save code blocks to see them here</p>
                 </div>
               ) : (
                 files.map((file, idx) => (
                   <div
                     key={idx}
-                    className="group p-2 rounded-lg bg-muted/30 hover:bg-muted/60 transition-colors border border-border/30"
+                    className="group p-2 rounded-lg bg-muted/30 hover:bg-muted/60 transition-all duration-200 border border-border/30 hover:border-border/60"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-mono truncate">{file.filename}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {file.code.split("\n").length} lines
+                        <p className="text-xs font-mono truncate font-medium">{file.filename}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {file.code.split("\n").length} lines • {(file.code.length / 1024).toFixed(1)}KB
                         </p>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
                           onClick={() => setSelectedFile(file)}
-                          className="h-6 w-6 p-0"
+                          className="h-7 w-7"
+                          title="View code"
                         >
                           <Eye className="w-3 h-3" />
                         </Button>
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
                           onClick={() => handleDownloadFile(file)}
-                          className="h-6 w-6 p-0"
+                          className="h-7 w-7"
+                          title="Download file"
                         >
                           <Download className="w-3 h-3" />
                         </Button>
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
                           onClick={() => onDeleteFile(file.filename)}
-                          className="h-6 w-6 p-0"
+                          className="h-7 w-7 hover:text-destructive"
+                          title="Delete file"
                         >
-                          <Trash2 className="w-3 h-3 text-destructive" />
+                          <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
                     </div>

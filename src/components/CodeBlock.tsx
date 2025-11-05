@@ -26,31 +26,21 @@ export const CodeBlock = ({ code, language, filename, onSave }: CodeBlockProps) 
     }
   };
 
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: "text/plain" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "code.txt";
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="rounded-lg overflow-hidden border border-border bg-card my-4">
       {filename && (
-        <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
-          <span className="text-sm font-mono text-muted-foreground">{filename}</span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleCopy}
-              className="h-7 px-2"
-            >
-              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-            </Button>
-            {onSave && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleSave}
-                className="h-7 px-2"
-              >
-                <Save className="w-3 h-3" />
-              </Button>
-            )}
-          </div>
+        <div className="flex items-center justify-between px-3 py-2 bg-muted border-b border-border">
+          <span className="text-xs sm:text-sm font-mono text-muted-foreground truncate">{filename}</span>
         </div>
       )}
       <SyntaxHighlighter
@@ -58,13 +48,54 @@ export const CodeBlock = ({ code, language, filename, onSave }: CodeBlockProps) 
         style={vscDarkPlus}
         customStyle={{
           margin: 0,
-          padding: "1rem",
+          padding: "0.75rem",
           background: "hsl(var(--card))",
-          fontSize: "0.875rem",
+          fontSize: "0.75rem",
         }}
+        showLineNumbers
       >
         {code}
       </SyntaxHighlighter>
+      <div className="flex items-center justify-end gap-2 px-3 py-2 bg-muted border-t border-border">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleCopy}
+          className="h-8 px-3 text-xs"
+        >
+          {copied ? (
+            <>
+              <Check className="w-3 h-3 mr-1.5" />
+              <span>Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3 h-3 mr-1.5" />
+              <span>Copy</span>
+            </>
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleDownload}
+          className="h-8 px-3 text-xs"
+        >
+          <Save className="w-3 h-3 mr-1.5" />
+          <span>Download</span>
+        </Button>
+        {onSave && filename && (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={handleSave}
+            className="h-8 px-3 text-xs bg-primary hover:bg-primary/90"
+          >
+            <Save className="w-3 h-3 mr-1.5" />
+            <span>Save to Project</span>
+          </Button>
+        )}
+      </div>
     </div>
   );
 };

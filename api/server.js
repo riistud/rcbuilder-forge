@@ -12,7 +12,6 @@ const PORT = process.env.PORT || 3001;
 const API_URL = "https://api.deepinfra.com/v1/openai/chat/completions";
 const MAX_TIMEOUT_MS = 500000;
 
-// Middleware
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -21,12 +20,10 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// File paths
 const USERS_DB = path.join(__dirname, 'acc.json');
 const MODELS_DB = path.join(__dirname, 'models.json');
 const SESSIONS_DIR = path.join(__dirname, 'sessions');
 
-// Ensure directories exist
 async function initializeDirectories() {
   try {
     await fs.mkdir(SESSIONS_DIR, { recursive: true });
@@ -36,7 +33,6 @@ async function initializeDirectories() {
   }
 }
 
-// Read JSON file
 async function readJSON(filePath) {
   try {
     const data = await fs.readFile(filePath, 'utf8');
@@ -47,7 +43,6 @@ async function readJSON(filePath) {
   }
 }
 
-// Write JSON file
 async function writeJSON(filePath, data) {
   try {
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
@@ -57,8 +52,6 @@ async function writeJSON(filePath, data) {
     return false;
   }
 }
-
-// ==================== AUTH ROUTES ====================
 
 app.post('/api/auth/login', async (req, res) => {
   try {
@@ -91,7 +84,49 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// ==================== AI ROUTES ====================
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages, model } = req.body;
+
+    if (!messages || !model) {
+      return res.status(400).json({ error: 'Messages and model are required' });
+    }
+
+    const payload = {
+      model,
+      messages,
+      stream: false,
+    };
+
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Deepinfra-Source": "web-page",
+      "accept": "application/json",
+      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36",
+      "Referer": "https://deepinfra.com/chat",
+    };
+
+    const response = await axios.post(API_URL, payload, {
+      headers,
+      timeout: MAX_TIMEOUT_MS
+    });
+
+    const content = response.data?.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('Empty response from AI');
+    }
+
+    res.json({ success: true, response: content });
+
+  } catch (error) {
+    console.error('Chat error:', error);
+    if (error.code === 'ECONNABORTED') {
+      return res.status(408).json({ error: 'Request timeout' });
+    }
+    res.status(500).json({ error: error.message || 'Chat failed' });
+  }
+});
 
 app.post('/api/generate', async (req, res) => {
   try {
@@ -101,12 +136,7 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt and model are required' });
     }
 
-    const systemInstruction = `Anda adalah RiiBotzz, asisten AI multifungsi yang dibuat oleh RiiCODE.
-
-KEMAMPUAN UTAMA:
-1. Coding Expert - Ahli dalam SEMUA bahasa pemrograman
-2. Conversational AI - Bisa diskusi, tanya jawab, brainstorming
-3. Problem Solver - Bantu debugging, analisis, dan solusi teknis
+    const systemInstruction = `Anda adalah RiiBotzz, asisten AI code generator yang dibuat oleh RiiCODE.
 
 ATURAN PENTING UNTUK MEMBUAT KODE:
 
@@ -179,8 +209,6 @@ Selalu deliver kode yang LENGKAP, SIAP PAKAI, dan MODERN!`;
     res.status(500).json({ error: error.message || 'AI generation failed' });
   }
 });
-
-// ==================== SESSION ROUTES ====================
 
 app.post('/api/sessions/save', async (req, res) => {
   try {
@@ -347,9 +375,6 @@ app.delete('/api/sessions/:sessionName', async (req, res) => {
   }
 });
 
-// ==================== ADMIN ROUTES ====================
-
-// Users Management
 app.get('/api/admin/users', async (req, res) => {
   try {
     const users = await readJSON(USERS_DB);
@@ -415,7 +440,6 @@ app.delete('/api/admin/users/:username', async (req, res) => {
   }
 });
 
-// Models Management
 app.get('/api/admin/models', async (req, res) => {
   try {
     const models = await readJSON(MODELS_DB);
@@ -508,13 +532,9 @@ app.delete('/api/admin/models/:id', async (req, res) => {
   }
 });
 
-// ==================== HEALTH CHECK ====================
-
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'RcBuilder API is running' });
 });
-
-// ==================== START SERVER ====================
 
 initializeDirectories().then(() => {
   app.listen(PORT, '0.0.0.0', () => {
